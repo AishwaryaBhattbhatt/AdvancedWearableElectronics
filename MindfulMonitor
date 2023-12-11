@@ -1,0 +1,129 @@
+#include <Adafruit_GFX.h>
+#include <Adafruit_NeoMatrix.h>
+#include <Adafruit_NeoPixel.h>
+#define USE_ARDUINO_INTERRUPTS true
+#include <PulseSensorPlayground.h>
+
+#define PIN 6
+
+Adafruit_NeoMatrix matrix = Adafruit_NeoMatrix(4, 8, PIN,
+                                               NEO_MATRIX_TOP + NEO_MATRIX_RIGHT + NEO_MATRIX_COLUMNS + NEO_MATRIX_PROGRESSIVE,
+                                               NEO_GRB + NEO_KHZ800);
+
+const uint16_t colors[] = {
+  matrix.Color(0, 255, 0),  // Green
+  matrix.Color(0, 0, 255),  // Blue
+  matrix.Color(255, 0, 0)   // Red
+};
+
+const int PulseWire = A4;
+const int LED = LED_BUILTIN;
+int Signal;
+int Threshold = 300;
+
+PulseSensorPlayground pulseSensor;
+
+// Smoothing variables
+const int numReadings = 10;
+int readings[numReadings];
+int readIndex = 0;
+int total = 0;
+int average = 0;
+
+int delayValue; // Declare delayValue as a global variable
+
+void drawAndUpdateMatrix(uint16_t x, uint16_t y, uint16_t color);
+int smoothPulseSensorValue();
+
+void setup() {
+  Serial.begin(9600);
+
+  matrix.begin();
+  matrix.setTextWrap(false);
+  matrix.setBrightness(1);
+
+  pulseSensor.analogInput(PulseWire);
+  pulseSensor.blinkOnPulse(LED);
+  pulseSensor.setThreshold(Threshold);
+
+  if (pulseSensor.begin()) {
+    Serial.println("PulseSensor initialized!");
+  }
+
+  // Call drawAndUpdateMatrix before the loop starts
+  drawAndUpdateMatrix(0, 0, colors[1]);
+}
+
+void loop() {
+  // Smooth the PulseSensor values
+  Signal = smoothPulseSensorValue(); 
+  Serial.println(Signal); // Send the smoothed Signal value to Serial Plotter.
+
+ // Set the color based on Signal value
+uint16_t color = (Signal < 10) ? colors[1] : colors[2];
+
+// Update the matrix with the chosen color
+drawAndUpdateMatrix(0, 0, color);
+
+
+  // Clear the matrix after completing one cycle
+  matrix.fillScreen(0);
+  matrix.show();
+
+  // Determine delay based on Signal value
+  if (Signal < 10) {
+    delayValue = 100;
+  } else {
+    delayValue = 25;
+  }
+
+  delay(delayValue);
+}
+
+int smoothPulseSensorValue() {
+  total = total - readings[readIndex];
+  readings[readIndex] = analogRead(PulseWire);
+  total = total + readings[readIndex];
+  readIndex = readIndex + 1;
+
+  if (readIndex >= numReadings) {
+    readIndex = 0;
+  }
+
+  average = total / numReadings;
+  return average;
+}
+
+void drawAndUpdateMatrix(uint16_t x, uint16_t y, uint16_t color) {
+  // Draw the top side
+  for (int i = 0; i < 4; ++i) {
+    matrix.drawPixel(i, 0, color);
+    matrix.show();
+    delay(delayValue);
+  }
+
+  // Draw the right side
+  for (int i = 1; i < 8; ++i) {
+    matrix.drawPixel(3, i, color);
+    matrix.show();
+    delay(delayValue);
+  }
+
+  // Draw the bottom side
+  for (int i = 2; i >= 0; --i) {
+    matrix.drawPixel(i, 7, color);
+    matrix.show();
+    delay(delayValue);
+  }
+
+  // Draw the left side
+  for (int i = 6; i > 0; --i) {
+    matrix.drawPixel(0, i, color);
+    matrix.show();
+    delay(delayValue);
+  }
+
+  // Update the matrix
+  matrix.show();
+  delay(30);
+}
